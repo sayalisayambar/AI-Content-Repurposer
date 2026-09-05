@@ -21,17 +21,36 @@ except Exception:
     st.stop()
 
 MODEL = "gemini-3.5-flash"
+FALLBACK_MODEL = "gemini-3.5-flash-lite"
 
 
 # -----------------------------
 # AI GENERATION FUNCTION
 # -----------------------------
 def generate_content(prompt):
-    response = client.models.generate_content(
-        model=MODEL,
-        contents=prompt
-    )
-    return response.text
+    import time
+
+    models = [MODEL, FALLBACK_MODEL]
+
+    for model in models:
+        for attempt in range(3):
+            try:
+                response = client.models.generate_content(
+                    model=model,
+                    contents=prompt
+                )
+                return response.text
+
+            except Exception as e:
+                error_text = str(e)
+
+                if "503" in error_text or "UNAVAILABLE" in error_text:
+                    time.sleep(2 ** attempt)
+                    continue
+
+                break
+
+    return "AI service is temporarily unavailable. Please try again."
 
 
 # -----------------------------
