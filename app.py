@@ -1,509 +1,238 @@
-from ollama import chat
 import streamlit as st
-from docx import Document
-from io import BytesIO
-import requests
+from google import genai
 
-
-# ---------------- PAGE CONFIG ----------------
+# -----------------------------
+# PAGE CONFIG
+# -----------------------------
 st.set_page_config(
     page_title="AI Content Repurposer",
-    page_icon="✨",
+    page_icon="🤖",
     layout="wide"
 )
 
+# -----------------------------
+# GEMINI CLIENT
+# -----------------------------
+try:
+    api_key = st.secrets["GEMINI_API_KEY"]
+    client = genai.Client(api_key=api_key)
+except Exception:
+    st.error("Gemini API key is not configured correctly.")
+    st.stop()
 
-# ---------------- AI FUNCTION ----------------
-def ask_ai(prompt):
-    api_key = st.secrets["GROQ_API_KEY"]
+MODEL = "gemini-2.5-flash"
 
-    response = requests.post(
-        "https://api.groq.com/openai/v1/chat/completions",
-        headers={
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json"
-        },
-        json={
-           "model": "gemma3",
-            "messages": [
-                {
-                    "role": "system",
-                    "content": (
-                        "You are an expert social media content repurposing AI. "
-                        "Use ONLY the information provided by the user. "
-                        "Never invent facts, statistics, names, dates, links, "
-                        "products, customers, results or events."
-                    )
-                },
-                {
-                    "role": "user",
-                    "content": prompt
-                }
-            ],
-            "temperature": 0.4
-        },
-        timeout=120
+
+# -----------------------------
+# AI GENERATION FUNCTION
+# -----------------------------
+def generate_content(prompt):
+    response = client.models.generate_content(
+        model=MODEL,
+        contents=prompt
     )
-
-    if response.status_code != 200:
-        raise Exception(response.text)
-
-    return response.json()["choices"][0]["message"]["content"]
+    return response.text
 
 
-# ---------------- FILE READER ----------------
-def extract_file_content(uploaded_file):
-
-    if uploaded_file.name.endswith(".txt"):
-        return uploaded_file.read().decode("utf-8")
-
-    elif uploaded_file.name.endswith(".docx"):
-        document = Document(uploaded_file)
-
-        paragraphs = [
-            paragraph.text
-            for paragraph in document.paragraphs
-            if paragraph.text.strip()
-        ]
-
-        return "\n".join(paragraphs)
-
-    return ""
-
-
-# ---------------- CONTENT ANALYSIS ----------------
-def analyze_content(content):
+# -----------------------------
+# CONTENT UNDERSTANDING
+# -----------------------------
+def understand_content(content):
 
     prompt = f"""
-Analyze ONLY the ORIGINAL CONTENT.
+You are an AI content analysis assistant.
 
-ORIGINAL CONTENT:
+Analyze the following original content:
+
 -------------------------
 {content}
 -------------------------
 
-Return exactly:
+Extract:
 
-MAIN TOPIC:
-[main topic]
+1. Main Topic
+2. Main Message
+3. 3-5 Key Points
+4. Target Audience
+5. Tone
+6. Important Keywords
+7. Suggested Content Angle
 
-MAIN MESSAGE:
-[main message in one sentence]
-
-KEY FACTS:
-- [fact]
-- [fact]
-- [fact]
-
-KEY POINTS:
-- [point]
-- [point]
-- [point]
-
-TARGET AUDIENCE:
-[only if supported by the content]
-
-TONE:
-[tone]
-
-IMPORTANT KEYWORDS:
-- [keyword]
-- [keyword]
-- [keyword]
-
-STRICT RULES:
-- Use only information from the original content.
-- Do not add outside facts.
-- Do not invent statistics.
-- Do not invent examples.
-- If information is unavailable, write "Not specified".
+Rules:
+- Use only information present in the original content.
+- Do not invent facts.
+- Keep the analysis concise and clear.
 """
 
-    return ask_ai(prompt)
+    return generate_content(prompt)
 
 
-# ---------------- GENERATION ----------------
-def generate_platform_content(content, analysis, platform, tone):
+# -----------------------------
+# PLATFORM REPURPOSING
+# -----------------------------
+def repurpose_content(content, platform):
 
     instructions = {
 
         "Instagram": """
 Create:
-CAPTION:
-REEL HOOK:
-REEL SCRIPT:
-HASHTAGS:
-CTA:
+1. Instagram caption
+2. Short Reel hook/script
+3. 5-8 relevant hashtags
+4. Call-to-action
+
+Make it engaging, readable and suitable for Instagram.
 """,
 
         "LinkedIn": """
 Create:
-HOOK:
-POST:
-HASHTAGS:
-CTA:
+1. Professional LinkedIn post
+2. Strong opening hook
+3. 3-5 relevant hashtags
+4. Call-to-action
+
+Make it informative, professional and discussion-friendly.
 """,
 
         "X": """
 Create:
-POST:
-THREAD:
-HASHTAGS:
+1. A concise X post
+2. If useful, create a 3-post thread
+3. 2-4 relevant hashtags
+4. Call-to-action
+
+Keep it concise and engaging.
 """,
 
         "YouTube": """
 Create:
-TITLE:
-DESCRIPTION:
-KEYWORDS/TAGS:
-HOOK:
+1. Attention-grabbing YouTube title
+2. YouTube description
+3. 5 relevant keywords/tags
+4. Short video hook
+
+Keep the title interesting but accurate.
 """
     }
 
     prompt = f"""
-You are repurposing ORIGINAL CONTENT for {platform}.
+You are an AI social media content repurposing assistant.
 
 ORIGINAL CONTENT:
 -------------------------
 {content}
 -------------------------
 
-CONTENT ANALYSIS:
--------------------------
-{analysis}
--------------------------
+TARGET PLATFORM:
+{platform}
 
-TONE:
-{tone}
-
-Create platform-specific content using this structure:
+TASK:
+Repurpose the original content specifically for {platform}.
 
 {instructions[platform]}
 
-STRICT RULES:
-- Original content is the source of truth.
-- Use ONLY facts and ideas present in the original content.
-- Do not invent statistics.
-- Do not invent names.
-- Do not invent dates.
-- Do not invent links.
-- Do not invent products or services.
-- Do not invent customer results.
-- Do not make unsupported claims.
-- Preserve important terminology.
-- Do not replace specific terms like AI with vague phrases such as
-  "this technology", "new tools", or "intelligent systems".
-- Make the content natural and publish-ready.
-- Do not explain what you changed.
-- Do not mention AI.
-- Do not ask questions.
-- Return ONLY the requested content.
+IMPORTANT RULES:
+- Preserve the original meaning.
+- Do not invent facts.
+- Do not copy the original text word-for-word.
+- Adapt the content to the platform.
+- Make the output ready to publish.
 """
 
-    return ask_ai(prompt)
+    return generate_content(prompt)
 
 
-# ---------------- VALIDATION ----------------
-def validate_content(original_content, generated_content, platform):
+# -----------------------------
+# UI
+# -----------------------------
+st.title("🤖 AI-Based Social Media Content Repurposing System")
 
-    prompt = f"""
-You are a strict content fact-checking and editing system.
-
-ORIGINAL CONTENT:
--------------------------
-{original_content}
--------------------------
-
-GENERATED {platform.upper()} CONTENT:
--------------------------
-{generated_content}
--------------------------
-
-Check the generated content against the original.
-
-Remove or rewrite anything that is NOT supported by the original content.
-
-Unsupported information includes:
-- Invented statistics
-- Invented links
-- Invented products
-- Invented services
-- Invented events
-- Invented customer results
-- Unsupported claims
-- Information from outside knowledge
-
-IMPORTANT:
-- Preserve supported information.
-- Preserve the platform structure.
-- Do not add new information.
-- Do not explain changes.
-- Return ONLY the corrected final content.
-
-If everything is supported, return the generated content unchanged.
-"""
-
-    return ask_ai(prompt)
-
-
-# ---------------- DOCX EXPORT ----------------
-def create_docx(results):
-
-    document = Document()
-
-    document.add_heading(
-        "AI-Based Social Media Content Repurposing System",
-        level=1
-    )
-
-    for platform, content in results.items():
-
-        document.add_heading(platform, level=2)
-
-        for line in content.split("\n"):
-
-            if line.strip():
-                document.add_paragraph(line)
-
-    output = BytesIO()
-    document.save(output)
-    output.seek(0)
-
-    return output
-
-
-# ---------------- TXT EXPORT ----------------
-def create_txt(results):
-
-    text = ""
-
-    for platform, content in results.items():
-
-        text += f"\n{'=' * 50}\n"
-        text += f"{platform.upper()}\n"
-        text += f"{'=' * 50}\n\n"
-        text += content
-        text += "\n"
-
-    return text
-
-
-# ---------------- HEADER ----------------
-st.title("✨ AI-Based Social Media Content Repurposing System")
-
-st.caption(
-    "Transform one piece of content into platform-specific content "
-    "for Instagram, LinkedIn, X and YouTube."
+st.write(
+    "Transform one original piece of content into "
+    "platform-specific content for Instagram, LinkedIn, X and YouTube."
 )
 
+st.divider()
 
-# ---------------- SIDEBAR ----------------
-with st.sidebar:
+# -----------------------------
+# INPUT
+# -----------------------------
+st.subheader("📝 Enter Your Original Content")
 
-    st.header("⚙️ Settings")
-
-    tone = st.selectbox(
-        "Select Tone",
-        [
-            "Professional",
-            "Casual",
-            "Creative",
-            "Educational",
-            "Friendly",
-            "Persuasive"
-        ]
-    )
-
-    st.markdown("---")
-
-    st.write("Select platforms:")
-
-    instagram = st.checkbox("📸 Instagram", value=True)
-    linkedin = st.checkbox("💼 LinkedIn", value=True)
-    x_platform = st.checkbox("𝕏 X", value=True)
-    youtube = st.checkbox("▶️ YouTube", value=True)
-
-
-# ---------------- INPUT ----------------
-st.subheader("📝 Original Content")
-
-input_method = st.radio(
-    "Choose input method",
-    ["Paste Content", "Upload TXT/DOCX"],
-    horizontal=True
+content = st.text_area(
+    "Paste your content below:",
+    height=250,
+    placeholder="Example: Artificial intelligence is changing the way students learn..."
 )
 
-content = ""
+# -----------------------------
+# PLATFORM SELECTION
+# -----------------------------
+st.subheader("🎯 Select Platforms")
 
-if input_method == "Paste Content":
+platforms = st.multiselect(
+    "Choose the platforms you want to generate content for:",
+    ["Instagram", "LinkedIn", "X", "YouTube"],
+    default=["Instagram", "LinkedIn", "X", "YouTube"]
+)
 
-    content = st.text_area(
-        "Paste your original content here:",
-        height=250,
-        placeholder="Paste your article, blog, script, transcript or other content..."
-    )
-
-else:
-
-    uploaded_file = st.file_uploader(
-        "Upload TXT or DOCX file",
-        type=["txt", "docx"]
-    )
-
-    if uploaded_file:
-
-        content = extract_file_content(uploaded_file)
-
-        st.success("File loaded successfully.")
-
-        with st.expander("Preview Original Content"):
-            st.write(content)
-
-
-# ---------------- GENERATE ----------------
-if st.button(
-    "🚀 Repurpose Content",
-    type="primary",
-    use_container_width=True
-):
+# -----------------------------
+# GENERATE BUTTON
+# -----------------------------
+if st.button("🚀 Repurpose Content", use_container_width=True):
 
     if not content.strip():
+        st.warning("Please enter some original content first.")
 
-        st.warning("Please provide some content first.")
+    elif not platforms:
+        st.warning("Please select at least one platform.")
 
     else:
 
-        platforms = []
+        # -----------------------------
+        # CONTENT UNDERSTANDING
+        # -----------------------------
+        st.subheader("🧠 AI Content Understanding")
 
-        if instagram:
-            platforms.append("Instagram")
+        with st.spinner("AI is understanding your content..."):
+            analysis = understand_content(content)
 
-        if linkedin:
-            platforms.append("LinkedIn")
+        st.markdown(analysis)
 
-        if x_platform:
-            platforms.append("X")
+        st.divider()
 
-        if youtube:
-            platforms.append("YouTube")
+        # -----------------------------
+        # PLATFORM CONTENT
+        # -----------------------------
+        st.subheader("📱 Platform-Specific Content")
 
-        if not platforms:
+        for platform in platforms:
 
-            st.warning("Please select at least one platform.")
+            with st.expander(f"✨ {platform}", expanded=True):
 
-        else:
+                with st.spinner(f"Generating {platform} content..."):
 
-            try:
-
-                # -------- ANALYSIS --------
-                with st.spinner("🔎 Analyzing original content..."):
-
-                    analysis = analyze_content(content)
-
-                with st.expander("🧠 AI Content Analysis"):
-
-                    st.text(analysis)
-
-                # -------- GENERATION --------
-                results = {}
-
-                progress = st.progress(0)
-
-                for i, platform in enumerate(platforms):
-
-                    with st.spinner(
-                        f"✍️ Creating {platform} content..."
-                    ):
-
-                        generated = generate_platform_content(
-                            content,
-                            analysis,
-                            platform,
-                            tone
-                        )
-
-                    with st.spinner(
-                        f"🔍 Validating {platform} content..."
-                    ):
-
-                        validated = validate_content(
-                            content,
-                            generated,
-                            platform
-                        )
-
-                    results[platform] = validated
-
-                    progress.progress(
-                        (i + 1) / len(platforms)
+                    result = repurpose_content(
+                        content,
+                        platform
                     )
 
-                progress.empty()
+                st.markdown(result)
 
-                # -------- RESULTS --------
-                st.success("🎉 Content generated successfully!")
-
-                st.subheader("📱 Platform-Specific Content")
-
-                for platform, result in results.items():
-
-                    with st.expander(
-                        f"✨ {platform}",
-                        expanded=True
-                    ):
-
-                        st.text_area(
-                            f"{platform} Content",
-                            result,
-                            height=350,
-                            key=f"{platform}_output"
-                        )
-
-                # -------- DOWNLOADS --------
-                st.subheader("📥 Export")
-
-                txt_content = create_txt(results)
-
-                docx_file = create_docx(results)
-
-                col1, col2 = st.columns(2)
-
-                with col1:
-
-                    st.download_button(
-                        "⬇️ Download TXT",
-                        data=txt_content,
-                        file_name="repurposed_social_content.txt",
-                        mime="text/plain",
-                        use_container_width=True
-                    )
-
-                with col2:
-
-                    st.download_button(
-                        "⬇️ Download DOCX",
-                        data=docx_file,
-                        file_name="repurposed_social_content.docx",
-                        mime=(
-                            "application/vnd.openxmlformats-officedocument."
-                            "wordprocessingml.document"
-                        ),
-                        use_container_width=True
-                    )
-
-            except Exception as e:
-
-                st.error(
-                    "Something went wrong while generating the content."
+                st.download_button(
+                    label=f"⬇️ Download {platform} Content",
+                    data=result,
+                    file_name=f"{platform.lower()}_content.txt",
+                    mime="text/plain"
                 )
 
-                st.code(str(e))
+        st.success(
+            "🎉 Content repurposing completed successfully!"
+        )
 
+        st.divider()
 
-# ---------------- FOOTER ----------------
-st.markdown("---")
-
-st.caption(
-    "AI-Based Social Media Content Repurposing System | "
-    "Powered by Streamlit + Cloud AI"
-)
+        st.info(
+            "💡 One original content → AI understanding → "
+            "platform-specific optimization → ready-to-use content"
+        )
