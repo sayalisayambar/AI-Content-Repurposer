@@ -20,7 +20,7 @@ except Exception:
     st.error("Gemini API key is not configured correctly.")
     st.stop()
 
-MODEL = "gemini-2.5-flash"
+MODEL = "gemini-3.5-flash"
 
 
 # -----------------------------
