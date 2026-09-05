@@ -1,4 +1,4 @@
-
+from ollama import chat
 import streamlit as st
 from docx import Document
 from io import BytesIO
@@ -24,7 +24,7 @@ def ask_ai(prompt):
             "Content-Type": "application/json"
         },
         json={
-           "model": "llama-3.3-70b-versatile",
+           "model": "gemma3",
             "messages": [
                 {
                     "role": "system",
